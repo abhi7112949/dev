@@ -201,6 +201,7 @@ interface IUSM is IERC20, Oracle {
     function getAssetMintFee(uint256 tokenAmount) external view returns (uint256);
 
     function getAssetBurnFee(uint256 ethAmount) external view returns (uint256); 
+    
 
     // function transferFrom(address from, address to,uint256 amount) external returns (bool); 
 
@@ -209,4 +210,8 @@ interface IUSM is IERC20, Oracle {
     // function approve(address spender, uint256 amount) external returns (bool);
 
     // function transfer(address to, uint256 amount) external returns (bool);
+
+    function returnFromPool(address poolAddress, address user, uint256 _amount ) external;
+
+    function sendToPool(address _sender,  address poolAddress, uint256 _amount) external;
 }

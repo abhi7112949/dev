@@ -1,8 +1,10 @@
+//USDAO Latest RInkeby Address: 0x84cFAa0dC0862e38e1E49924e9Cd75eAFF02ce1D
+
 // SPDX-License-Identifier: MIT
 
 pragma solidity 0.6.11;
 
-import "./Interfaces/ILUSDToken.sol";
+//import "./Interfaces/ILUSDToken.sol";
 import "./Dependencies/SafeMath.sol";
 import "./Dependencies/CheckContract.sol";
 import "./Dependencies/console.sol";
@@ -114,11 +116,13 @@ contract LUSDToken is CheckContract {
 
     function sendToPool(address _sender,  address _poolAddress, uint256 _amount) external {
         _requireCallerIsStabilityPool();
+        USDAO.approve(_sender,_amount);
         USDAO.transferFrom(_sender, _poolAddress, _amount);
     }
 
     function returnFromPool(address _poolAddress, address _receiver, uint256 _amount) external {
         _requireCallerIsTroveMorSP();
+        USDAO.approve(_receiver,_amount);
         USDAO.transferFrom(_poolAddress, _receiver, _amount);
     }
 

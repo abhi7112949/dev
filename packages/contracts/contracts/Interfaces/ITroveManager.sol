@@ -4,10 +4,10 @@ pragma solidity 0.6.11;
 
 import "./ILiquityBase.sol";
 import "./IStabilityPool.sol";
-import "./ILUSDToken.sol";
+//import "./ILUSDToken.sol";
 import "./ILQTYToken.sol";
 import "./ILQTYStaking.sol";
-
+import "./IUSM.sol"
 
 // Common interface for the Trove Manager.
 interface ITroveManager is ILiquityBase {
@@ -55,7 +55,8 @@ interface ITroveManager is ILiquityBase {
     ) external;
 
     function stabilityPool() external view returns (IStabilityPool);
-    function lusdToken() external view returns (ILUSDToken);
+    //function lusdToken() external view returns (ILUSDToken);
+    function lusdToken() external view returns (IUSM);
     function lqtyToken() external view returns (ILQTYToken);
     function lqtyStaking() external view returns (ILQTYStaking);
 
