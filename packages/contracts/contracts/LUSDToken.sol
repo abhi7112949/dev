@@ -6,6 +6,7 @@ import "./Interfaces/ILUSDToken.sol";
 import "./Dependencies/SafeMath.sol";
 import "./Dependencies/CheckContract.sol";
 import "./Dependencies/console.sol";
+import "./Interfaces/IUSM.sol";
 /*
 *
 * Based upon OpenZeppelin's ERC20 contract:
@@ -24,14 +25,16 @@ import "./Dependencies/console.sol";
 * 2) sendToPool() and returnFromPool(): functions callable only Liquity core contracts, which move LUSD tokens between Liquity <-> user.
 */
 
-contract LUSDToken is CheckContract, ILUSDToken {
+contract LUSDToken is CheckContract {
     using SafeMath for uint256;
     
     uint256 private _totalSupply;
-    string constant internal _NAME = "LUSD Stablecoin";
-    string constant internal _SYMBOL = "LUSD";
+    string constant internal _NAME = "USDAO";
+    string constant internal _SYMBOL = "USDAO"; 
     string constant internal _VERSION = "1";
     uint8 constant internal _DECIMALS = 18;
+
+    IUSM USDAO;
     
     // --- Data for EIP2612 ---
     
@@ -68,13 +71,16 @@ contract LUSDToken is CheckContract, ILUSDToken {
     ( 
         address _troveManagerAddress,
         address _stabilityPoolAddress,
-        address _borrowerOperationsAddress
+        address _borrowerOperationsAddress,
+        IUSM _USDAOAddress
     ) 
         public 
     {  
         checkContract(_troveManagerAddress);
         checkContract(_stabilityPoolAddress);
         checkContract(_borrowerOperationsAddress);
+
+        USDAO = IUSM(_USDAOAddress);
 
         troveManagerAddress = _troveManagerAddress;
         emit TroveManagerAddressChanged(_troveManagerAddress);
@@ -96,71 +102,71 @@ contract LUSDToken is CheckContract, ILUSDToken {
 
     // --- Functions for intra-Liquity calls ---
 
-    function mint(address _account, uint256 _amount) external override {
+    function mint(address _account, uint256 _amount) external {
         _requireCallerIsBorrowerOperations();
-        _mint(_account, _amount);
+        USDAO.mint(_account, _amount);
     }
 
-    function burn(address _account, uint256 _amount) external override {
+    function burn(address _account, uint256 _amount) external {
         _requireCallerIsBOorTroveMorSP();
-        _burn(_account, _amount);
+        USDAO.burn(payable(_account), _amount,0);
     }
 
-    function sendToPool(address _sender,  address _poolAddress, uint256 _amount) external override {
+    function sendToPool(address _sender,  address _poolAddress, uint256 _amount) external {
         _requireCallerIsStabilityPool();
-        _transfer(_sender, _poolAddress, _amount);
+        USDAO.transferFrom(_sender, _poolAddress, _amount);
     }
 
-    function returnFromPool(address _poolAddress, address _receiver, uint256 _amount) external override {
+    function returnFromPool(address _poolAddress, address _receiver, uint256 _amount) external {
         _requireCallerIsTroveMorSP();
-        _transfer(_poolAddress, _receiver, _amount);
+        USDAO.transferFrom(_poolAddress, _receiver, _amount);
     }
 
     // --- External functions ---
 
-    function totalSupply() external view override returns (uint256) {
-        return _totalSupply;
+    function totalSupply() external view returns (uint256) {
+        return USDAO.totalSupply();
     }
 
-    function balanceOf(address account) external view override returns (uint256) {
-        return _balances[account];
+    function balanceOf(address account) external view returns (uint256) {
+        return USDAO.balanceOf(account);
     }
 
-    function transfer(address recipient, uint256 amount) external override returns (bool) {
+    function transfer(address recipient, uint256 amount) external returns (bool) {
         _requireValidRecipient(recipient);
-        _transfer(msg.sender, recipient, amount);
+        USDAO.transfer(recipient, amount);
         return true;
     }
 
-    function allowance(address owner, address spender) external view override returns (uint256) {
-        return _allowances[owner][spender];
+    function allowance(address owner, address spender) external view returns (uint256) {
+        return USDAO.allowance(owner,spender);
     }
 
-    function approve(address spender, uint256 amount) external override returns (bool) {
-        _approve(msg.sender, spender, amount);
+    function approve(address spender, uint256 amount) external returns (bool) {
+        USDAO.approve(spender, amount);
         return true;
     }
-
-    function transferFrom(address sender, address recipient, uint256 amount) external override returns (bool) {
+    //In the front-end user will have to allow the contract to transfer user's USDAO to different pools.
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool) {
         _requireValidRecipient(recipient);
-        _transfer(sender, recipient, amount);
-        _approve(sender, msg.sender, _allowances[sender][msg.sender].sub(amount, "ERC20: transfer amount exceeds allowance"));
+        require(USDAO.allowance(sender, recipient) >= amount, "Not enough allowances");
+        USDAO.transferFrom(sender, recipient, amount);
         return true;
     }
 
-    function increaseAllowance(address spender, uint256 addedValue) external override returns (bool) {
-        _approve(msg.sender, spender, _allowances[msg.sender][spender].add(addedValue));
+    function increaseAllowance(address spender, uint256 addedValue) external returns (bool) {
+        USDAO.approve(spender, _allowances[msg.sender][spender].add(addedValue));
         return true;
     }
 
-    function decreaseAllowance(address spender, uint256 subtractedValue) external override returns (bool) {
-        _approve(msg.sender, spender, _allowances[msg.sender][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
+    function decreaseAllowance(address spender, uint256 subtractedValue) external returns (bool) {
+        USDAO.approve(spender, _allowances[msg.sender][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
         return true;
     }
 
     // --- EIP 2612 Functionality ---
 
-    function domainSeparator() public view override returns (bytes32) {    
+    function domainSeparator() public view returns (bytes32) {    
         if (_chainID() == _CACHED_CHAIN_ID) {
             return _CACHED_DOMAIN_SEPARATOR;
         } else {
@@ -178,8 +184,7 @@ contract LUSDToken is CheckContract, ILUSDToken {
         bytes32 r, 
         bytes32 s
     ) 
-        external 
-        override 
+        external  
     {            
         require(deadline >= now, 'LUSD: expired deadline');
         bytes32 digest = keccak256(abi.encodePacked('\x19\x01', 
@@ -188,10 +193,10 @@ contract LUSDToken is CheckContract, ILUSDToken {
                          _nonces[owner]++, deadline))));
         address recoveredAddress = ecrecover(digest, v, r, s);
         require(recoveredAddress == owner, 'LUSD: invalid signature');
-        _approve(owner, spender, amount);
+        USDAO.approve(spender, amount);
     }
 
-    function nonces(address owner) external view override returns (uint256) { // FOR EIP 2612
+    function nonces(address owner) external view returns (uint256) { // FOR EIP 2612
         return _nonces[owner];
     }
 
@@ -210,38 +215,38 @@ contract LUSDToken is CheckContract, ILUSDToken {
     // --- Internal operations ---
     // Warning: sanity checks (for sender and recipient) should have been done before calling these internal functions
 
-    function _transfer(address sender, address recipient, uint256 amount) internal {
-        assert(sender != address(0));
-        assert(recipient != address(0));
+    // function _transfer(address sender, address recipient, uint256 amount) internal {
+    //     assert(sender != address(0));
+    //     assert(recipient != address(0));
 
-        _balances[sender] = _balances[sender].sub(amount, "ERC20: transfer amount exceeds balance");
-        _balances[recipient] = _balances[recipient].add(amount);
-        emit Transfer(sender, recipient, amount);
-    }
+    //     _balances[sender] = _balances[sender].sub(amount, "ERC20: transfer amount exceeds balance");
+    //     _balances[recipient] = _balances[recipient].add(amount);
+    //     emit Transfer(sender, recipient, amount);
+    // }
 
-    function _mint(address account, uint256 amount) internal {
-        assert(account != address(0));
+    // function _mint(address account, uint256 amount) internal {
+    //     assert(account != address(0));
 
-        _totalSupply = _totalSupply.add(amount);
-        _balances[account] = _balances[account].add(amount);
-        emit Transfer(address(0), account, amount);
-    }
+    //     _totalSupply = _totalSupply.add(amount);
+    //     _balances[account] = _balances[account].add(amount);
+    //     emit Transfer(address(0), account, amount);
+    // }
 
-    function _burn(address account, uint256 amount) internal {
-        assert(account != address(0));
+    // function _burn(address account, uint256 amount) internal {
+    //     assert(account != address(0));
         
-        _balances[account] = _balances[account].sub(amount, "ERC20: burn amount exceeds balance");
-        _totalSupply = _totalSupply.sub(amount);
-        emit Transfer(account, address(0), amount);
-    }
+    //     _balances[account] = _balances[account].sub(amount, "ERC20: burn amount exceeds balance");
+    //     _totalSupply = _totalSupply.sub(amount);
+    //     emit Transfer(account, address(0), amount);
+    // }
 
-    function _approve(address owner, address spender, uint256 amount) internal {
-        assert(owner != address(0));
-        assert(spender != address(0));
+    // function _approve(address owner, address spender, uint256 amount) internal {
+    //     assert(owner != address(0));
+    //     assert(spender != address(0));
 
-        _allowances[owner][spender] = amount;
-        emit Approval(owner, spender, amount);
-    }
+    //     _allowances[owner][spender] = amount;
+    //     emit Approval(owner, spender, amount);
+    // }
 
     // --- 'require' functions ---
 
@@ -284,23 +289,23 @@ contract LUSDToken is CheckContract, ILUSDToken {
 
     // --- Optional functions ---
 
-    function name() external view override returns (string memory) {
+    function name() external view returns (string memory) {
         return _NAME;
     }
 
-    function symbol() external view override returns (string memory) {
+    function symbol() external view returns (string memory) {
         return _SYMBOL;
     }
 
-    function decimals() external view override returns (uint8) {
+    function decimals() external view returns (uint8) {
         return _DECIMALS;
     }
 
-    function version() external view override returns (string memory) {
+    function version() external view returns (string memory) {
         return _VERSION;
     }
 
-    function permitTypeHash() external view override returns (bytes32) {
+    function permitTypeHash() external view returns (bytes32) {
         return _PERMIT_TYPEHASH;
     }
 }
