@@ -113,7 +113,7 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         address _collSurplusPoolAddress,
         address _priceFeedAddress,
         address _sortedTrovesAddress,
-        address _lusdTokenAddress,
+        address _USMAddress,
         address _lqtyStakingAddress,
         address _USMView,
         address _revenueContract
@@ -133,7 +133,7 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         checkContract(_collSurplusPoolAddress);
         checkContract(_priceFeedAddress);
         checkContract(_sortedTrovesAddress);
-        checkContract(_lusdTokenAddress);
+        checkContract(_USMAddress);
         checkContract(_lqtyStakingAddress);
         checkContract(_USMView);
         checkContract(_revenueContract);
@@ -147,7 +147,7 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         priceFeed = IPriceFeed(_priceFeedAddress);
         sortedTroves = ISortedTroves(_sortedTrovesAddress);
         // lusdToken = ILUSDToken(_lusdTokenAddress);
-        lusdToken = IUSM(_lusdTokenAddress);
+        lusdToken = IUSM(_USMAddress);
         lqtyStakingAddress = _lqtyStakingAddress;
         lqtyStaking = ILQTYStaking(_lqtyStakingAddress);
         USMView = IUSMView(_USMView);
@@ -165,10 +165,10 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         emit CollSurplusPoolAddressChanged(_collSurplusPoolAddress);
         emit PriceFeedAddressChanged(_priceFeedAddress);
         emit SortedTrovesAddressChanged(_sortedTrovesAddress);
-        emit LUSDTokenAddressChanged(_lusdTokenAddress);
+        emit LUSDTokenAddressChanged(_USMAddress);
         emit LQTYStakingAddressChanged(_lqtyStakingAddress);
 
-        // _renounceOwnership();
+        _renounceOwnership();
     }
 
     // --- Borrower Trove Operations ---
@@ -223,12 +223,13 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         console.log("Messag value %s", msg.value);
         console.log("Amount %s", _LUSDAmount);
 
-        _USMPoolAddColl(msg.sender, msg.value, _LUSDAmount); 
+        //_USMPoolAddColl(contractsCache.activePool, msg.sender, msg.value, _LUSDAmount, vars.netDebt); 
 
         // Move the ether to the Active Pool, and mint the LUSDAmount to the borrower
-        // _activePoolAddColl(contractsCache.activePool, msg.value);
+        _activePoolAddColl(contractsCache.activePool, msg.value);
+        //contractsCache.activePool.activePoolAddColl(msg.value); 
         
-        // _withdrawLUSD(contractsCache.activePool, contractsCache.lusdToken, msg.sender, _LUSDAmount, vars.netDebt);
+        _withdrawLUSD(contractsCache.activePool, contractsCache.lusdToken, msg.sender, _LUSDAmount, vars.netDebt);
         // Move the LUSD gas compensation to the Gas Pool
         //_withdrawLUSD(contractsCache.activePool, contractsCache.lusdToken, gasPoolAddress, LUSD_GAS_COMPENSATION, LUSD_GAS_COMPENSATION);
 
@@ -236,21 +237,18 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         emit TroveUpdated(msg.sender, vars.compositeDebt, msg.value, vars.stake, BorrowerOperation.openTrove);
         emit LUSDBorrowingFeePaid(msg.sender, vars.LUSDFee);
     }
-    function _USMPoolAddColl(address _account, uint totETHAmount, uint USMAmount) internal{
-        // vars.price = priceFeed.fetchPrice();
-        // uint tot_EthInUSD = (vars.price * ETHAmount);
-        require(totETHAmount == msg.value, "total ether and msg.value should be same");
-
-        //uint USM_toBeMint = USMView.usmMint(EthtoMintUSM);
+    // function _USMPoolAddColl(IActivePool _activePool, address _account, uint totETHAmount, uint USMAmount, uint _netDebtIncrease) internal{
         
-        (bool success, ) = address(lusdToken).call{value: totETHAmount}("");
-        require(success, "BorrowerOps: Sending ETH to ActivePool failed");
-
-        lusdToken.onVaultMint(_account, USMAmount);
+    //     require(totETHAmount == msg.value, "total ether and msg.value should be same");
 
         
+        
+    //     (bool success, ) = address(lusdToken).call{value: totETHAmount}("");
+    //     require(success, "BorrowerOps: Sending ETH to USM failed");
 
-    }
+    //     _activePool.increaseLUSDDebt(_netDebtIncrease);
+    //     lusdToken.onVaultMint(_account, USMAmount);
+    // }
     // Send ETH as collateral to a trove
     function addColl(address _upperHint, address _lowerHint) external payable override {
         _adjustTrove(msg.sender, 0, 0, false, _upperHint, _lowerHint, 0);
@@ -483,13 +481,16 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         }
 
         if (_isCollIncrease) {
+            //_activePool.activePoolAddColl(_collChange);
             _activePoolAddColl(_activePool, _collChange);
         } else {
             _activePool.sendETH(_borrower, _collChange);
+            //(bool success, ) = _lusdToken.onVaultETHTransfer(_borrower, _collChange);
         }
     }
 
     // Send ETH to Active Pool and increase its recorded ETH balance
+    // !! -  Shifted this function to ActivePool contract
         function _activePoolAddColl(IActivePool _activePool, uint _amount) internal {
         (bool success, ) = address(_activePool).call{value: _amount}("");
         require(success, "BorrowerOps: Sending ETH to ActivePool failed");
@@ -497,8 +498,8 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
 
     // Issue the specified amount of LUSD to _account and increases the total active debt (_netDebtIncrease potentially includes a LUSDFee)
     function _withdrawLUSD(IActivePool _activePool, IUSM _lusdToken, address _account, uint _LUSDAmount, uint _netDebtIncrease) internal {
-        //_activePool.increaseLUSDDebt(_netDebtIncrease);
-        _lusdToken.mint(_account, _LUSDAmount);
+        _activePool.increaseLUSDDebt(_netDebtIncrease);
+        _lusdToken.onVaultMint(_account, _LUSDAmount);
     }
 
     // Burn the specified amount of LUSD from _account and decreases the total active debt

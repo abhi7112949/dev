@@ -2,6 +2,7 @@
 
 pragma solidity 0.6.11;
 
+import './Interfaces/IUSM.sol';
 import './Interfaces/IActivePool.sol';
 import "./Dependencies/SafeMath.sol";
 import "./Dependencies/Ownable.sol";
@@ -16,6 +17,8 @@ import "./Dependencies/console.sol";
  *
  */
 contract ActivePool is Ownable, CheckContract, IActivePool {
+    IUSM public USM;
+
     using SafeMath for uint256;
 
     string constant public NAME = "ActivePool";
@@ -40,7 +43,8 @@ contract ActivePool is Ownable, CheckContract, IActivePool {
         address _borrowerOperationsAddress,
         address _troveManagerAddress,
         address _stabilityPoolAddress,
-        address _defaultPoolAddress
+        address _defaultPoolAddress,
+        address _USMAddress
     )
         external
         onlyOwner
@@ -49,11 +53,13 @@ contract ActivePool is Ownable, CheckContract, IActivePool {
         checkContract(_troveManagerAddress);
         checkContract(_stabilityPoolAddress);
         checkContract(_defaultPoolAddress);
+        checkContract(_USMAddress);
 
         borrowerOperationsAddress = _borrowerOperationsAddress;
         troveManagerAddress = _troveManagerAddress;
         stabilityPoolAddress = _stabilityPoolAddress;
         defaultPoolAddress = _defaultPoolAddress;
+        USM = IUSM(_USMAddress);
 
         emit BorrowerOperationsAddressChanged(_borrowerOperationsAddress);
         emit TroveManagerAddressChanged(_troveManagerAddress);
@@ -80,14 +86,30 @@ contract ActivePool is Ownable, CheckContract, IActivePool {
 
     // --- Pool functionality ---
 
+    function activePoolAddColl(uint _amount) external payable override{
+        _requireCallerIsBorrowerOperationsOrDefaultPool();
+        ETH = ETH.add(_amount);
+        emit ActivePoolETHBalanceUpdated(ETH);
+
+        console.log("address(USM) %s" , address(USM));
+        console.log("_amount %s", _amount);
+        
+        (bool success, ) = address(USM).call{value: _amount}("");
+        
+        console.log("address(USM) %s" , address(USM));
+        console.log("_amount %s", _amount);
+        require(success, "BorrowerOps: Sending ETH to USM failed");
+    }
+
     function sendETH(address _account, uint _amount) external override {
         _requireCallerIsBOorTroveMorSP();
         ETH = ETH.sub(_amount);
         emit ActivePoolETHBalanceUpdated(ETH);
         emit EtherSent(_account, _amount);
 
-        (bool success, ) = _account.call{ value: _amount }("");
-        require(success, "ActivePool: sending ETH failed");
+        USM.onVaultETHTransfer(_account, _amount);
+        //(bool success, ) = _account.call{ value: _amount }("");
+        //require(success, "ActivePool: sending ETH failed");
     }
 
     function increaseLUSDDebt(uint _amount) external override {
@@ -131,6 +153,10 @@ contract ActivePool is Ownable, CheckContract, IActivePool {
     receive() external payable {
         _requireCallerIsBorrowerOperationsOrDefaultPool();
         ETH = ETH.add(msg.value);
+        if(msg.sender == borrowerOperationsAddress){
+            (bool success, ) = address(USM).call{value: msg.value}("");
+            require(success, "BorrowerOps: Sending ETH to USM failed");
+        }    
         emit ActivePoolETHBalanceUpdated(ETH);
     }
 }
