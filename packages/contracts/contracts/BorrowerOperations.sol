@@ -2,6 +2,8 @@
 
 pragma solidity 0.6.11;
 
+// import "hardhat/console.sol";
+
 import "./Interfaces/IBorrowerOperations.sol";
 import "./Interfaces/ITroveManager.sol";
 //import "./Interfaces/ILUSDToken.sol";
@@ -9,6 +11,7 @@ import "./Interfaces/IUSM.sol";
 import "./Interfaces/ICollSurplusPool.sol";
 import "./Interfaces/ISortedTroves.sol";
 import "./Interfaces/ILQTYStaking.sol";
+import "./Interfaces/IUSMView.sol";
 import "./Dependencies/LiquityBase.sol";
 import "./Dependencies/Ownable.sol";
 import "./Dependencies/CheckContract.sol";
@@ -20,6 +23,7 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
     // --- Connected contract declarations ---
 
     ITroveManager public troveManager;
+    
 
     address stabilityPoolAddress;
 
@@ -31,11 +35,13 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
     address public lqtyStakingAddress;
 
     //ILUSDToken public lusdToken;
-    IUSM public lusdToken;
-
+    
     // A doubly linked list of Troves, sorted by their collateral ratios
     ISortedTroves public sortedTroves;
-
+    
+    IUSM public lusdToken;
+    IUSMView public USMView;
+    address revenueContract;
     /* --- Variable container structs  ---
 
     Used to hold, return and assign variables inside a function, in order to avoid the error:
@@ -108,7 +114,9 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         address _priceFeedAddress,
         address _sortedTrovesAddress,
         address _lusdTokenAddress,
-        address _lqtyStakingAddress
+        address _lqtyStakingAddress,
+        address _USMView,
+        address _revenueContract
     )
         external
         override
@@ -127,6 +135,8 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         checkContract(_sortedTrovesAddress);
         checkContract(_lusdTokenAddress);
         checkContract(_lqtyStakingAddress);
+        checkContract(_USMView);
+        checkContract(_revenueContract);
 
         troveManager = ITroveManager(_troveManagerAddress);
         activePool = IActivePool(_activePoolAddress);
@@ -140,6 +150,12 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         lusdToken = IUSM(_lusdTokenAddress);
         lqtyStakingAddress = _lqtyStakingAddress;
         lqtyStaking = ILQTYStaking(_lqtyStakingAddress);
+        USMView = IUSMView(_USMView);
+        revenueContract = _revenueContract;
+
+        console.log("USMView %s ", address(USMView) );
+        console.log("revenueContract %s ", address(revenueContract) );
+        console.log("USM %s ", address(lusdToken) );
 
         emit TroveManagerAddressChanged(_troveManagerAddress);
         emit ActivePoolAddressChanged(_activePoolAddress);
@@ -152,7 +168,7 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         emit LUSDTokenAddressChanged(_lusdTokenAddress);
         emit LQTYStakingAddressChanged(_lqtyStakingAddress);
 
-        _renounceOwnership();
+        // _renounceOwnership();
     }
 
     // --- Borrower Trove Operations ---
@@ -203,16 +219,38 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         vars.arrayIndex = contractsCache.troveManager.addTroveOwnerToArray(msg.sender);
         emit TroveCreated(msg.sender, vars.arrayIndex);
 
+        console.log("Messag sender %s", msg.sender);
+        console.log("Messag value %s", msg.value);
+        console.log("Amount %s", _LUSDAmount);
+
+        _USMPoolAddColl(msg.sender, msg.value, _LUSDAmount); 
+
         // Move the ether to the Active Pool, and mint the LUSDAmount to the borrower
-        _activePoolAddColl(contractsCache.activePool, msg.value);
-        _withdrawLUSD(contractsCache.activePool, contractsCache.lusdToken, msg.sender, _LUSDAmount, vars.netDebt);
+        // _activePoolAddColl(contractsCache.activePool, msg.value);
+        
+        // _withdrawLUSD(contractsCache.activePool, contractsCache.lusdToken, msg.sender, _LUSDAmount, vars.netDebt);
         // Move the LUSD gas compensation to the Gas Pool
-        _withdrawLUSD(contractsCache.activePool, contractsCache.lusdToken, gasPoolAddress, LUSD_GAS_COMPENSATION, LUSD_GAS_COMPENSATION);
+        //_withdrawLUSD(contractsCache.activePool, contractsCache.lusdToken, gasPoolAddress, LUSD_GAS_COMPENSATION, LUSD_GAS_COMPENSATION);
+
 
         emit TroveUpdated(msg.sender, vars.compositeDebt, msg.value, vars.stake, BorrowerOperation.openTrove);
         emit LUSDBorrowingFeePaid(msg.sender, vars.LUSDFee);
     }
+    function _USMPoolAddColl(address _account, uint totETHAmount, uint USMAmount) internal{
+        // vars.price = priceFeed.fetchPrice();
+        // uint tot_EthInUSD = (vars.price * ETHAmount);
+        require(totETHAmount == msg.value, "total ether and msg.value should be same");
 
+        //uint USM_toBeMint = USMView.usmMint(EthtoMintUSM);
+        
+        (bool success, ) = address(lusdToken).call{value: totETHAmount}("");
+        require(success, "BorrowerOps: Sending ETH to ActivePool failed");
+
+        lusdToken.onVaultMint(_account, USMAmount);
+
+        
+
+    }
     // Send ETH as collateral to a trove
     function addColl(address _upperHint, address _lowerHint) external payable override {
         _adjustTrove(msg.sender, 0, 0, false, _upperHint, _lowerHint, 0);
@@ -373,7 +411,11 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         
         // Send fee to LQTY staking contract
         lqtyStaking.increaseF_LUSD(LUSDFee);
-        _lusdToken.mint(lqtyStakingAddress, LUSDFee);
+
+        console.log("Revenue contract address %s, revenueContract ");
+        console.log("LUSDFee %s , LUSDFee ");
+
+        _lusdToken.onVaultMint(revenueContract, LUSDFee);
 
         return LUSDFee;
     }
@@ -448,14 +490,14 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
     }
 
     // Send ETH to Active Pool and increase its recorded ETH balance
-    function _activePoolAddColl(IActivePool _activePool, uint _amount) internal {
+        function _activePoolAddColl(IActivePool _activePool, uint _amount) internal {
         (bool success, ) = address(_activePool).call{value: _amount}("");
         require(success, "BorrowerOps: Sending ETH to ActivePool failed");
     }
 
     // Issue the specified amount of LUSD to _account and increases the total active debt (_netDebtIncrease potentially includes a LUSDFee)
     function _withdrawLUSD(IActivePool _activePool, IUSM _lusdToken, address _account, uint _LUSDAmount, uint _netDebtIncrease) internal {
-        _activePool.increaseLUSDDebt(_netDebtIncrease);
+        //_activePool.increaseLUSDDebt(_netDebtIncrease);
         _lusdToken.mint(_account, _LUSDAmount);
     }
 

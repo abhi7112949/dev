@@ -7,7 +7,7 @@ import "./IStabilityPool.sol";
 //import "./ILUSDToken.sol";
 import "./ILQTYToken.sol";
 import "./ILQTYStaking.sol";
-import "./IUSM.sol"
+import "./IUSM.sol";
 
 // Common interface for the Trove Manager.
 interface ITroveManager is ILiquityBase {

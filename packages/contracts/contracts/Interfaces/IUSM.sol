@@ -214,4 +214,6 @@ interface IUSM is IERC20, Oracle {
     function returnFromPool(address poolAddress, address user, uint256 _amount ) external;
 
     function sendToPool(address _sender,  address poolAddress, uint256 _amount) external;
+
+    function onVaultMint(address to, uint amount) external;
 }

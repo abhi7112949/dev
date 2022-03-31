@@ -104,12 +104,12 @@ contract LUSDToken is CheckContract {
 
     // --- Functions for intra-Liquity calls ---
 
-    function mint(address _account, uint256 _amount) external {
+    function mint(address _account, uint256 _amount) payable external {
         _requireCallerIsBorrowerOperations();
         USDAO.mint(_account, _amount);
     }
 
-    function burn(address _account, uint256 _amount) external {
+    function burn(address _account, uint256 _amount) payable external {
         _requireCallerIsBOorTroveMorSP();
         USDAO.burn(payable(_account), _amount,0);
     }
