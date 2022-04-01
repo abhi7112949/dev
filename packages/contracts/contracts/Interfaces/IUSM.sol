@@ -217,5 +217,7 @@ interface IUSM is IERC20, Oracle {
 
     function onVaultMint(address to, uint amount) external;
 
+    function onVaultBurn(address to, uint amount) external;
+
     function onVaultETHTransfer(address borrower, uint amount) external;
 }

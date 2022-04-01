@@ -466,8 +466,10 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         }
 
         if (_isCollIncrease) {
+            
             console.log("_activePool %s ", address(_activePool));
             console.log("_collChange %s ", _collChange);
+
             _activePoolAddColl(_activePool, _collChange);
         } else {
             _activePool.sendETH(_borrower, _collChange);
@@ -490,7 +492,7 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
     // Burn the specified amount of LUSD from _account and decreases the total active debt
     function _repayLUSD(IActivePool _activePool, IUSM _lusdToken, address _account, uint _LUSD) internal {
         _activePool.decreaseLUSDDebt(_LUSD);
-        _lusdToken.burn(payable(_account), _LUSD,0);
+        _lusdToken.onVaultBurn(_account, _LUSD);
     }
 
     // --- 'Require' wrapper functions ---
