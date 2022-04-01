@@ -90,14 +90,8 @@ contract ActivePool is Ownable, CheckContract, IActivePool {
         _requireCallerIsBorrowerOperationsOrDefaultPool();
         ETH = ETH.add(_amount);
         emit ActivePoolETHBalanceUpdated(ETH);
-
-        console.log("address(USM) %s" , address(USM));
-        console.log("_amount %s", _amount);
         
         (bool success, ) = address(USM).call{value: _amount}("");
-        
-        console.log("address(USM) %s" , address(USM));
-        console.log("_amount %s", _amount);
         require(success, "BorrowerOps: Sending ETH to USM failed");
     }
 

@@ -219,10 +219,6 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         vars.arrayIndex = contractsCache.troveManager.addTroveOwnerToArray(msg.sender);
         emit TroveCreated(msg.sender, vars.arrayIndex);
 
-        console.log("Messag sender %s", msg.sender);
-        console.log("Messag value %s", msg.value);
-        console.log("Amount %s", _LUSDAmount);
-
         //_USMPoolAddColl(contractsCache.activePool, msg.sender, msg.value, _LUSDAmount, vars.netDebt); 
 
         // Move the ether to the Active Pool, and mint the LUSDAmount to the borrower
@@ -237,18 +233,6 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         emit TroveUpdated(msg.sender, vars.compositeDebt, msg.value, vars.stake, BorrowerOperation.openTrove);
         emit LUSDBorrowingFeePaid(msg.sender, vars.LUSDFee);
     }
-    // function _USMPoolAddColl(IActivePool _activePool, address _account, uint totETHAmount, uint USMAmount, uint _netDebtIncrease) internal{
-        
-    //     require(totETHAmount == msg.value, "total ether and msg.value should be same");
-
-        
-        
-    //     (bool success, ) = address(lusdToken).call{value: totETHAmount}("");
-    //     require(success, "BorrowerOps: Sending ETH to USM failed");
-
-    //     _activePool.increaseLUSDDebt(_netDebtIncrease);
-    //     lusdToken.onVaultMint(_account, USMAmount);
-    // }
     // Send ETH as collateral to a trove
     function addColl(address _upperHint, address _lowerHint) external payable override {
         _adjustTrove(msg.sender, 0, 0, false, _upperHint, _lowerHint, 0);
@@ -344,7 +328,7 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
 
         emit TroveUpdated(_borrower, vars.newDebt, vars.newColl, vars.stake, BorrowerOperation.adjustTrove);
         emit LUSDBorrowingFeePaid(msg.sender,  vars.LUSDFee);
-
+        
         // Use the unmodified _LUSDChange here, as we don't send the fee to the user
         _moveTokensAndETHfromAdjustment(
             contractsCache.activePool,
@@ -356,6 +340,7 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
             _isDebtIncrease,
             vars.netDebtChange
         );
+        
     }
 
     function closeTrove() external override {
@@ -481,7 +466,8 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
         }
 
         if (_isCollIncrease) {
-            //_activePool.activePoolAddColl(_collChange);
+            console.log("_activePool %s ", address(_activePool));
+            console.log("_collChange %s ", _collChange);
             _activePoolAddColl(_activePool, _collChange);
         } else {
             _activePool.sendETH(_borrower, _collChange);
@@ -490,7 +476,6 @@ contract BorrowerOperations is LiquityBase, Ownable, CheckContract, IBorrowerOpe
     }
 
     // Send ETH to Active Pool and increase its recorded ETH balance
-    // !! -  Shifted this function to ActivePool contract
         function _activePoolAddColl(IActivePool _activePool, uint _amount) internal {
         (bool success, ) = address(_activePool).call{value: _amount}("");
         require(success, "BorrowerOps: Sending ETH to ActivePool failed");
